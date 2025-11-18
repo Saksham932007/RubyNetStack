@@ -87,6 +87,25 @@ module RubyNetStack
       "  Frame Size: #{@raw_data&.length || 0} bytes"
     end
     
+    # Get hex dump of frame for debugging
+    def hex_dump(show_payload = true)
+      return "No raw data available" unless @raw_data
+      
+      result = "Ethernet Frame Hex Dump:\n"
+      result += "Header (14 bytes):\n"
+      result += HexPresenter.hex_dump(@raw_data[0, 14], 16, true)
+      
+      if show_payload && @payload.length > 0
+        result += "\n\nPayload (#{@payload.length} bytes):\n"
+        # Show first 64 bytes of payload to avoid overwhelming output
+        payload_to_show = @payload[0, 64]
+        result += HexPresenter.hex_dump(payload_to_show, 16, true)
+        result += "\n... (truncated)" if @payload.length > 64
+      end
+      
+      result
+    end
+    
     # Detailed inspection of frame
     def inspect
       return "#<EthernetFrame:invalid>" unless @dest_mac

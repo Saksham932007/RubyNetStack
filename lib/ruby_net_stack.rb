@@ -27,3 +27,4 @@ end
 require_relative "ruby_net_stack/raw_socket"
 require_relative "ruby_net_stack/network_interface"
 require_relative "ruby_net_stack/ethernet_frame"
+require_relative "ruby_net_stack/hex_presenter"

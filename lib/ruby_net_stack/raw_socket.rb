@@ -35,6 +35,12 @@ module RubyNetStack
         if frame.dest_mac
           puts "\n" + "="*50
           puts frame.to_s
+          
+          # Show hex dump for debugging (optional, can be enabled with env var)
+          if ENV['RUBY_NET_STACK_DEBUG']
+            puts "\n" + frame.hex_dump
+          end
+          
           puts "="*50
         else
           puts "Received invalid ethernet frame (#{data.length} bytes)"
