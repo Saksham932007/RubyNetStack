@@ -22,6 +22,7 @@ module RubyNetStack
       puts "Starting network stack on #{@interface_name}"
       puts "Socket created successfully: #{@socket.class}"
       puts "Interface index: #{@interface_index}"
+      puts "Socket bound to interface: #{@interface_name}"
       puts "Ready to capture and process raw network packets"
       
       # Basic packet capture loop (will be expanded later)
@@ -81,6 +82,47 @@ module RubyNetStack
       
       # Get MAC address for future use
       NetworkInterface.get_mac_address(@socket, @interface_name)
+      
+      # Bind socket to the specific interface
+      bind_to_interface
+    end
+    
+    # Bind the raw socket to a specific network interface using sockaddr_ll
+    def bind_to_interface
+      # struct sockaddr_ll {
+      #   unsigned short sll_family;   // AF_PACKET = 17
+      #   unsigned short sll_protocol; // ETH_P_ALL = 0x0003  
+      #   int            sll_ifindex;   // Interface index
+      #   unsigned short sll_hatype;   // Hardware type (not used for bind)
+      #   unsigned char  sll_pkttype;  // Packet type (not used for bind)
+      #   unsigned char  sll_halen;    // Hardware address length
+      #   unsigned char  sll_addr[8];  // Hardware address (not used for bind)
+      # };
+      
+      # Pack sockaddr_ll structure for binding
+      # S = unsigned short (2 bytes), I = int (4 bytes), C = unsigned char (1 byte)
+      sockaddr_ll = [
+        Socket::AF_PACKET,           # sll_family (2 bytes)
+        RubyNetStack::ETH_P_ALL,    # sll_protocol (2 bytes) 
+        @interface_index,            # sll_ifindex (4 bytes)
+        0,                          # sll_hatype (2 bytes) - not needed for bind
+        0,                          # sll_pkttype (1 byte) - not needed for bind
+        0,                          # sll_halen (1 byte) - not needed for bind
+        0, 0, 0, 0, 0, 0, 0, 0      # sll_addr[8] (8 bytes) - not needed for bind
+      ].pack("SSISCC8")
+      
+      begin
+        @socket.bind(sockaddr_ll)
+        puts "Successfully bound socket to interface #{@interface_name} (index: #{@interface_index})"
+      rescue Errno::ENODEV
+        puts "Error: Interface #{@interface_name} not available for binding"
+        close
+        exit 1
+      rescue StandardError => e
+        puts "Error binding socket to interface: #{e.message}"
+        close
+        exit 1
+      end
     end
   end
 end
