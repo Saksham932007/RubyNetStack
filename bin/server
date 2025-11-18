@@ -1,0 +1,25 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require_relative "../lib/ruby_net_stack"
+
+# Entry point for the RubyNetStack server
+# This must be run with sudo privileges to access raw sockets
+
+def main
+  if Process.uid != 0
+    puts "Error: This program requires root privileges"
+    puts "Please run with sudo: sudo ruby bin/server"
+    exit 1
+  end
+  
+  begin
+    socket = RubyNetStack::RawSocket.new
+    socket.start
+  rescue StandardError => e
+    puts "Error starting network stack: #{e.message}"
+    exit 1
+  end
+end
+
+main if __FILE__ == $PROGRAM_NAME
