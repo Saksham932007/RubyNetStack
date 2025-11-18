@@ -106,7 +106,7 @@ module RubyNetStack
       result
     end
     
-    # Detailed inspection of frame
+    # Detailed inspection
     def inspect
       return "#<EthernetFrame:invalid>" unless @dest_mac
       
@@ -114,6 +114,37 @@ module RubyNetStack
       "#{@src_mac}->#{@dest_mac} " +
       "type=#{ethertype_description} " + 
       "payload=#{@payload.length}b>"
+    end
+    
+    # Pack ethernet frame for transmission
+    def pack
+      return nil unless @dest_mac && @src_mac && @ethertype
+      
+      # Convert MAC addresses back to binary
+      dest_mac_bytes = parse_mac_to_bytes(@dest_mac)
+      src_mac_bytes = parse_mac_to_bytes(@src_mac)
+      
+      # Pack header: dest_mac(6) + src_mac(6) + ethertype(2)
+      header = dest_mac_bytes + src_mac_bytes + [@ethertype].pack("n")
+      
+      header + (@payload || "")
+    end
+    
+    # Create ethernet frame for transmission
+    def self.create(dest_mac, src_mac, ethertype, payload = "")
+      frame = new
+      frame.instance_variable_set(:@dest_mac, dest_mac)
+      frame.instance_variable_set(:@src_mac, src_mac)
+      frame.instance_variable_set(:@ethertype, ethertype)
+      frame.instance_variable_set(:@payload, payload)
+      frame
+    end
+    
+    private
+    
+    # Convert MAC address string to binary bytes
+    def parse_mac_to_bytes(mac_string)
+      mac_string.split(":").map { |hex| hex.to_i(16) }.pack("C6")
     end
   end
 end

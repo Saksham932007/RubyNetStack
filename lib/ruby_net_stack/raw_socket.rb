@@ -44,8 +44,21 @@ module RubyNetStack
             if ENV['RUBY_NET_STACK_VERIFY_CHECKSUMS']
               puts "  Packet Integrity: #{verify_packet_integrity(result[:frame], result[:data])}"
             end
+            
+            # Handle ICMP ping requests (auto-reply)
+            if result[:transport] && result[:transport][:type] == :icmp
+              handle_icmp_message(result[:frame], result[:data], result[:transport][:data])
+            end
+            
+            # Handle UDP packets on port 4321
+            if result[:transport] && result[:transport][:type] == :udp
+              handle_udp_packet(result[:frame], result[:data], result[:transport][:data])
+            end
+            
           when :arp
             puts "  ARP Analysis: #{analyze_arp(result[:data])}"
+            # Handle ARP requests for our interface
+            handle_arp_packet(result[:frame], result[:data])
           end
         end
         
@@ -125,6 +138,88 @@ module RubyNetStack
       analysis.join(", ")
     end
     
+    # Handle ICMP messages (ping-pong)
+    def handle_icmp_message(ethernet_frame, ip_packet, icmp_message)
+      return unless icmp_message&.echo_request?
+      
+      puts "  -> Received ICMP Echo Request, sending Echo Reply"
+      
+      # Create ICMP echo reply
+      reply_icmp = icmp_message.create_echo_reply
+      return unless reply_icmp
+      
+      # Send reply back to sender
+      send_icmp_reply(ethernet_frame.src_mac, ip_packet.src_ip_str, 
+                     ethernet_frame.dest_mac, ip_packet.dest_ip_str, 
+                     reply_icmp.pack)
+    end
+    
+    # Handle ARP requests
+    def handle_arp_packet(ethernet_frame, arp_packet)
+      return unless arp_packet&.request?
+      
+      # Get our interface IP (simplified - in real implementation would query interface)
+      our_ip = ENV['RUBY_NET_STACK_IP'] || "192.168.1.100"  # Configurable IP
+      
+      if arp_packet.target_ip_str == our_ip
+        puts "  -> ARP request for our IP, sending ARP reply"
+        
+        # Get our MAC address from the interface
+        our_mac = get_interface_mac
+        return unless our_mac
+        
+        # Create ARP reply
+        reply_arp = ARPPacket.create_reply(our_mac, our_ip, 
+                                         arp_packet.sender_mac_str, 
+                                         arp_packet.sender_ip_str)
+        
+        # Send ARP reply
+        send_arp_reply(arp_packet.sender_mac_str, our_mac, reply_arp.pack)
+      end
+    end
+    
+    # Handle UDP packets (echo server on port 4321)
+    def handle_udp_packet(ethernet_frame, ip_packet, udp_datagram)
+      return unless udp_datagram&.dest_port == 4321
+      
+      puts "  -> UDP packet to port 4321 (Ruby NetStack), processing..."
+      
+      # Echo server: uppercase the payload and send it back
+      response_payload = udp_datagram.payload_string.upcase
+      
+      puts "  -> Original: \"#{udp_datagram.payload_string}\""
+      puts "  -> Response: \"#{response_payload}\""
+      
+      # Send UDP response
+      send_udp_response(ethernet_frame.src_mac, ip_packet.src_ip_str,
+                       ethernet_frame.dest_mac, ip_packet.dest_ip_str,
+                       udp_datagram.src_port, udp_datagram.dest_port,
+                       response_payload)
+    end
+    
+    # Send ICMP reply
+    def send_icmp_reply(dest_mac, dest_ip, src_mac, src_ip, icmp_data)
+      send_ip_packet(dest_mac, src_mac, src_ip, dest_ip, 
+                    IPPacket::PROTOCOL_ICMP, icmp_data)
+    end
+    
+    # Send ARP reply
+    def send_arp_reply(dest_mac, src_mac, arp_data)
+      send_ethernet_frame(dest_mac, src_mac, EthernetFrame::ETHERTYPE_ARP, arp_data)
+    end
+    
+    # Send UDP response
+    def send_udp_response(dest_mac, dest_ip, src_mac, src_ip, dest_port, src_port, payload)
+      send_udp_packet(dest_mac, src_mac, src_ip, dest_ip, src_port, dest_port, payload)
+    end
+    
+    # Get interface MAC address
+    def get_interface_mac
+      # In a real implementation, this would get the actual interface MAC
+      # For demo purposes, return a configurable MAC
+      ENV['RUBY_NET_STACK_MAC'] || "02:42:ac:11:00:02"
+    end
+    
     # Classify IP address type for analysis
     def classify_ip(ip_string)
       return "INVALID" unless IPAddress.valid?(ip_string)
@@ -173,24 +268,52 @@ module RubyNetStack
       checks.join(", ")
     end
     
-    # Analyze ARP packets
-    def analyze_arp(arp_packet)
-      analysis = []
-      
-      if arp_packet.request?
-        analysis << "ARP_REQUEST"
-        analysis << "seeking #{arp_packet.target_ip_str}"
-      elsif arp_packet.reply?
-        analysis << "ARP_REPLY" 
-        analysis << "#{arp_packet.sender_ip_str} -> #{arp_packet.sender_mac_str}"
+    # Send raw packet data to the network
+    def send_raw(packet_data)
+      begin
+        bytes_sent = @socket.send(packet_data, 0)
+        puts "Sent #{bytes_sent} bytes to network"
+        bytes_sent
+      rescue StandardError => e
+        puts "Error sending packet: #{e.message}"
+        0
       end
-      
-      if arp_packet.target_mac_broadcast?
-        analysis << "BROADCAST"
-      end
-      
-      analysis.join(", ")
     end
+    
+    # Send complete ethernet frame
+    def send_ethernet_frame(dest_mac, src_mac, ethertype, payload)
+      frame = EthernetFrame.create(dest_mac, src_mac, ethertype, payload)
+      packet_data = frame.pack
+      
+      if packet_data
+        send_raw(packet_data)
+      else
+        puts "Failed to construct ethernet frame"
+        0
+      end
+    end
+    
+    # Send IP packet (will be wrapped in ethernet frame)
+    def send_ip_packet(dest_mac, src_mac, src_ip, dest_ip, protocol, payload)
+      ip_packet = IPPacket.create(src_ip, dest_ip, protocol, payload)
+      ip_data = ip_packet.pack
+      
+      if ip_data
+        send_ethernet_frame(dest_mac, src_mac, EthernetFrame::ETHERTYPE_IP, ip_data)
+      else
+        puts "Failed to construct IP packet"
+        0
+      end
+    end
+    
+    # Send UDP packet
+    def send_udp_packet(dest_mac, src_mac, src_ip, dest_ip, src_port, dest_port, payload)
+      udp_datagram = UDPDatagram.create(src_port, dest_port, payload)
+      udp_data = udp_datagram.pack(src_ip, dest_ip)
+      
+      if udp_data
+        send_ip_packet(dest_mac, src_mac, src_ip, dest_ip, IPPacket::PROTOCOL_UDP, udp_data)
+      else\n        puts \"Failed to construct UDP packet\"\n        0\n      end\n    end\n    \n    # Analyze ARP packets\n    def analyze_arp(arp_packet)\n      analysis = []\n      \n      if arp_packet.request?\n        analysis << \"ARP_REQUEST\"\n        analysis << \"seeking #{arp_packet.target_ip_str}\"\n      elsif arp_packet.reply?\n        analysis << \"ARP_REPLY\" \n        analysis << \"#{arp_packet.sender_ip_str} -> #{arp_packet.sender_mac_str}\"\n      end\n      \n      if arp_packet.target_mac_broadcast?\n        analysis << \"BROADCAST\"\n      end\n      \n      analysis.join(\", \")\n    end
     
     # Get interface information using ioctl calls
     def get_interface_info

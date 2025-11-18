@@ -205,5 +205,64 @@ module RubyNetStack
       "len=#{@total_length} " +
       "payload=#{@payload.length}b>"
     end
+    
+    # Pack IP packet for transmission
+    def pack
+      return nil unless @version && @src_ip && @dest_ip && @protocol
+      
+      # Set defaults if not specified
+      @version ||= VERSION_IPV4
+      @ihl ||= 5  # 20 bytes header, no options
+      @tos ||= 0
+      @identification ||= rand(0xFFFF)
+      @flags ||= FLAG_DONT_FRAGMENT
+      @fragment_offset ||= 0
+      @ttl ||= 64
+      @total_length = (ihl * 4) + payload.length
+      
+      # Build header without checksum
+      version_ihl = (@version << 4) | @ihl
+      flags_frag = (@flags << 13) | @fragment_offset
+      
+      header = [
+        version_ihl,
+        @tos,
+        @total_length,
+        @identification,
+        flags_frag,
+        @ttl,
+        @protocol,
+        0,  # checksum will be calculated
+        @src_ip,
+        @dest_ip
+      ].pack("CCnnnCCna4a4")
+      
+      # Add options if present
+      header += (@options || "")
+      
+      # Calculate and insert checksum
+      @checksum = Checksum.ip_checksum(header)
+      header[10, 2] = [@checksum].pack("n")
+      
+      header + (@payload || "")
+    end
+    
+    # Create IP packet for transmission
+    def self.create(src_ip, dest_ip, protocol, payload = "")
+      packet = new
+      packet.instance_variable_set(:@version, VERSION_IPV4)
+      packet.instance_variable_set(:@ihl, 5)
+      packet.instance_variable_set(:@tos, 0)
+      packet.instance_variable_set(:@identification, rand(0xFFFF))
+      packet.instance_variable_set(:@flags, FLAG_DONT_FRAGMENT)
+      packet.instance_variable_set(:@fragment_offset, 0)
+      packet.instance_variable_set(:@ttl, 64)
+      packet.instance_variable_set(:@protocol, protocol)
+      packet.instance_variable_set(:@src_ip, IPAddress.string_to_bytes(src_ip))
+      packet.instance_variable_set(:@dest_ip, IPAddress.string_to_bytes(dest_ip))
+      packet.instance_variable_set(:@payload, payload)
+      packet.instance_variable_set(:@options, "")
+      packet
+    end
   end
 end

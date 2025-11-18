@@ -94,17 +94,33 @@ module RubyNetStack
       "  Payload: #{payload_info}"
     end
     
-    # Create UDP packet binary data for transmission
+    # Pack UDP datagram for transmission  
     def pack(src_ip = nil, dest_ip = nil)
+      return nil unless @src_port && @dest_port
+      
+      @payload ||= ""
+      length = UDP_HEADER_SIZE + @payload.length
+      
       # Calculate checksum if IP addresses provided
       checksum_val = 0
       if src_ip && dest_ip
-        temp_header = [src_port, dest_port, payload.length + 8, 0].pack("nnnn")
-        temp_packet = temp_header + payload
-        checksum_val = Checksum.udp_checksum(src_ip, dest_ip, temp_packet)
+        temp_header = [@src_port, @dest_port, length, 0].pack("nnnn")
+        temp_packet = temp_header + @payload
+        checksum_val = Checksum.udp_checksum(IPAddress.string_to_bytes(src_ip), 
+                                            IPAddress.string_to_bytes(dest_ip), 
+                                            temp_packet)
       end
       
-      [src_port, dest_port, payload.length + 8, checksum_val].pack("nnnn") + payload
+      [@src_port, @dest_port, length, checksum_val].pack("nnnn") + @payload
+    end
+    
+    # Create UDP datagram for transmission
+    def self.create(src_port, dest_port, payload = "")
+      datagram = new
+      datagram.instance_variable_set(:@src_port, src_port)
+      datagram.instance_variable_set(:@dest_port, dest_port)
+      datagram.instance_variable_set(:@payload, payload)
+      datagram
     end
     
     private

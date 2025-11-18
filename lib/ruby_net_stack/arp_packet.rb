@@ -154,16 +154,50 @@ module RubyNetStack
     
     # Create an ARP request packet
     def self.create_request(sender_mac, sender_ip, target_ip)
-      # This will be used later for packet construction
-      # For now, return a placeholder
-      new
+      packet = new
+      packet.instance_variable_set(:@hardware_type, HARDWARE_ETHERNET)
+      packet.instance_variable_set(:@protocol_type, PROTOCOL_IP)
+      packet.instance_variable_set(:@hardware_size, 6)
+      packet.instance_variable_set(:@protocol_size, 4)
+      packet.instance_variable_set(:@opcode, OPCODE_REQUEST)
+      packet.instance_variable_set(:@sender_mac, parse_mac_to_bytes(sender_mac))
+      packet.instance_variable_set(:@sender_ip, IPAddress.string_to_bytes(sender_ip))
+      packet.instance_variable_set(:@target_mac, "\x00" * 6)  # Unknown, seeking this
+      packet.instance_variable_set(:@target_ip, IPAddress.string_to_bytes(target_ip))
+      packet
     end
     
     # Create an ARP reply packet
     def self.create_reply(sender_mac, sender_ip, target_mac, target_ip)
-      # This will be used later for packet construction
-      # For now, return a placeholder
-      new
+      packet = new
+      packet.instance_variable_set(:@hardware_type, HARDWARE_ETHERNET)
+      packet.instance_variable_set(:@protocol_type, PROTOCOL_IP)
+      packet.instance_variable_set(:@hardware_size, 6)
+      packet.instance_variable_set(:@protocol_size, 4)
+      packet.instance_variable_set(:@opcode, OPCODE_REPLY)
+      packet.instance_variable_set(:@sender_mac, parse_mac_to_bytes(sender_mac))
+      packet.instance_variable_set(:@sender_ip, IPAddress.string_to_bytes(sender_ip))
+      packet.instance_variable_set(:@target_mac, parse_mac_to_bytes(target_mac))
+      packet.instance_variable_set(:@target_ip, IPAddress.string_to_bytes(target_ip))
+      packet
+    end
+    
+    # Pack ARP packet for transmission
+    def pack
+      [
+        @hardware_type,
+        @protocol_type,
+        @hardware_size,
+        @protocol_size,
+        @opcode
+      ].pack("nnCCn") + @sender_mac + @sender_ip + @target_mac + @target_ip
+    end
+    
+    private
+    
+    # Convert MAC address string to binary bytes (class method version)
+    def self.parse_mac_to_bytes(mac_string)
+      mac_string.split(":").map { |hex| hex.to_i(16) }.pack("C6")
     end
   end
 end
