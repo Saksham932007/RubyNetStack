@@ -7,11 +7,12 @@ module RubyNetStack
   # This allows us to send and receive raw ethernet frames, bypassing
   # the kernel's network stack
   class RawSocket
-    attr_reader :socket, :interface_name, :interface_index
+    attr_reader :socket, :interface_name, :interface_index, :dispatcher
     
     def initialize(interface = "eth0")
       @interface_name = interface
       @interface_index = nil
+      @dispatcher = PacketDispatcher.new
       puts "RubyNetStack v#{RubyNetStack::VERSION} - Raw Socket Network Stack"
       puts "Initializing userspace network stack for interface: #{@interface_name}"
       create_raw_socket
@@ -25,39 +26,39 @@ module RubyNetStack
       puts "Socket bound to interface: #{@interface_name}"
       puts "Ready to capture and process raw network packets"
       
-      # Enhanced packet capture loop with ethernet frame parsing
+      # Enhanced packet capture loop with dispatcher
       loop do
         data, = @socket.recvfrom(65536)
         
-        # Parse the ethernet frame
-        frame = EthernetFrame.new(data)
+        # Dispatch packet through our protocol stack
+        result = @dispatcher.dispatch(data)
         
-        if frame.dest_mac
-          puts "\n" + "="*60
-          puts frame.to_s
-          
-          # Parse IP packets from ethernet payload
-          if frame.ip? && frame.payload.length > 0
-            ip_packet = IPPacket.new(frame.payload)
-            if ip_packet.version
-              puts "\n" + ip_packet.to_s
-              puts "  Protocol Analysis: #{analyze_protocol(ip_packet)}"
-              
-              # Validate checksums if enabled
-              if ENV['RUBY_NET_STACK_VERIFY_CHECKSUMS']
-                puts "  Packet Integrity: #{verify_packet_integrity(frame, ip_packet)}"
-              end
+        puts "\n" + "="*70
+        puts @dispatcher.format_result(result)
+        
+        # Show packet analysis if enabled
+        if ENV['RUBY_NET_STACK_ANALYZE'] && result[:data]
+          case result[:type]
+          when :ip
+            puts "  Protocol Analysis: #{analyze_protocol(result[:data])}"
+            if ENV['RUBY_NET_STACK_VERIFY_CHECKSUMS']
+              puts "  Packet Integrity: #{verify_packet_integrity(result[:frame], result[:data])}"
             end
+          when :arp
+            puts "  ARP Analysis: #{analyze_arp(result[:data])}"
           end
-          
-          # Show hex dump for debugging (optional, can be enabled with env var)
-          if ENV['RUBY_NET_STACK_DEBUG']
-            puts "\n" + frame.hex_dump
-          end
-          
-          puts "="*60
-        else
-          puts "Received invalid ethernet frame (#{data.length} bytes)"
+        end
+        
+        # Show hex dump for debugging (optional, can be enabled with env var)
+        if ENV['RUBY_NET_STACK_DEBUG']
+          puts "\n" + result[:frame].hex_dump if result[:frame]
+        end
+        
+        puts "="*70
+        
+        # Show stats periodically
+        if @dispatcher.stats[:total_packets] % 10 == 0
+          puts "\n" + @dispatcher.stats_summary
         end
         
         break if data.length == 0
@@ -170,6 +171,25 @@ module RubyNetStack
       end
       
       checks.join(", ")
+    end
+    
+    # Analyze ARP packets
+    def analyze_arp(arp_packet)
+      analysis = []
+      
+      if arp_packet.request?
+        analysis << "ARP_REQUEST"
+        analysis << "seeking #{arp_packet.target_ip_str}"
+      elsif arp_packet.reply?
+        analysis << "ARP_REPLY" 
+        analysis << "#{arp_packet.sender_ip_str} -> #{arp_packet.sender_mac_str}"
+      end
+      
+      if arp_packet.target_mac_broadcast?
+        analysis << "BROADCAST"
+      end
+      
+      analysis.join(", ")
     end
     
     # Get interface information using ioctl calls
