@@ -25,3 +25,4 @@ end
 
 # Require all the stack components
 require_relative "ruby_net_stack/raw_socket"
+require_relative "ruby_net_stack/network_interface"

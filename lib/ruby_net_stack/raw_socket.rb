@@ -7,18 +7,21 @@ module RubyNetStack
   # This allows us to send and receive raw ethernet frames, bypassing
   # the kernel's network stack
   class RawSocket
-    attr_reader :socket
+    attr_reader :socket, :interface_name, :interface_index
     
     def initialize(interface = "eth0")
-      @interface = interface
+      @interface_name = interface
+      @interface_index = nil
       puts "RubyNetStack v#{RubyNetStack::VERSION} - Raw Socket Network Stack"
-      puts "Initializing userspace network stack for interface: #{@interface}"
+      puts "Initializing userspace network stack for interface: #{@interface_name}"
       create_raw_socket
+      get_interface_info
     end
     
     def start
-      puts "Starting network stack on #{@interface}"
+      puts "Starting network stack on #{@interface_name}"
       puts "Socket created successfully: #{@socket.class}"
+      puts "Interface index: #{@interface_index}"
       puts "Ready to capture and process raw network packets"
       
       # Basic packet capture loop (will be expanded later)
@@ -59,6 +62,25 @@ module RubyNetStack
         puts "Error creating raw socket: #{e.message}"
         exit 1
       end
+    end
+    
+    # Get interface information using ioctl calls
+    def get_interface_info
+      @interface_index = NetworkInterface.get_interface_index(@socket, @interface_name)
+      
+      if @interface_index.nil?
+        puts "Failed to get interface index for #{@interface_name}"
+        close
+        exit 1
+      end
+      
+      # Check if interface is up and running
+      unless NetworkInterface.interface_up?(@socket, @interface_name)
+        puts "Warning: Interface #{@interface_name} may not be up and running"
+      end
+      
+      # Get MAC address for future use
+      NetworkInterface.get_mac_address(@socket, @interface_name)
     end
   end
 end
