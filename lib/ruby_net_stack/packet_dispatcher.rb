@@ -87,13 +87,21 @@ module RubyNetStack
     def dispatch_transport_layer(ip_packet)
       case ip_packet.protocol
       when IPPacket::PROTOCOL_UDP
-        # Will implement UDP parsing later
-        { type: :udp, data: nil, parsed: false }
+        udp_datagram = UDPDatagram.new(ip_packet.payload)
+        if udp_datagram.src_port
+          { type: :udp, data: udp_datagram, parsed: true }
+        else
+          { type: :udp, data: nil, parsed: false }
+        end
       when IPPacket::PROTOCOL_TCP
         { type: :tcp, data: nil, parsed: false }
       when IPPacket::PROTOCOL_ICMP
-        # Will implement ICMP parsing later
-        { type: :icmp, data: nil, parsed: false }
+        icmp_message = ICMPMessage.new(ip_packet.payload)
+        if icmp_message.type
+          { type: :icmp, data: icmp_message, parsed: true }
+        else
+          { type: :icmp, data: nil, parsed: false }
+        end
       else
         { type: :unknown_transport, data: nil, parsed: false }
       end
