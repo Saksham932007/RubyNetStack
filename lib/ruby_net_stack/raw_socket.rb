@@ -42,6 +42,11 @@ module RubyNetStack
             if ip_packet.version
               puts "\n" + ip_packet.to_s
               puts "  Protocol Analysis: #{analyze_protocol(ip_packet)}"
+              
+              # Validate checksums if enabled
+              if ENV['RUBY_NET_STACK_VERIFY_CHECKSUMS']
+                puts "  Packet Integrity: #{verify_packet_integrity(frame, ip_packet)}"
+              end
             end
           end
           
@@ -134,6 +139,37 @@ module RubyNetStack
       else
         "PUBLIC"
       end
+    end
+    
+    # Verify packet integrity including checksums
+    def verify_packet_integrity(ethernet_frame, ip_packet)
+      checks = []
+      
+      # Check ethernet frame size
+      if ethernet_frame.valid_size?
+        checks << "ETH_SIZE_OK"
+      else
+        checks << "ETH_SIZE_INVALID"
+      end
+      
+      # Check IP packet checksums
+      if ip_packet.valid_checksum?
+        checks << "IP_CHECKSUM_OK"
+      else
+        checks << "IP_CHECKSUM_INVALID"
+      end
+      
+      # Check payload length consistency
+      declared_length = ip_packet.total_length
+      actual_payload = ip_packet.header_length + ip_packet.payload.length
+      
+      if declared_length == actual_payload
+        checks << "LENGTH_CONSISTENT"
+      else
+        checks << "LENGTH_MISMATCH(declared:#{declared_length},actual:#{actual_payload})"
+      end
+      
+      checks.join(", ")
     end
     
     # Get interface information using ioctl calls

@@ -83,6 +83,24 @@ module RubyNetStack
       true
     end
     
+    # Verify IP header checksum
+    def valid_checksum?
+      return false unless @raw_data && header_length > 0
+      
+      header_data = @raw_data[0, header_length]
+      Checksum.verify_ip_checksum(header_data)
+    end
+    
+    # Get checksum verification status
+    def checksum_status
+      if valid_checksum?
+        "VALID (0x#{sprintf('%04x', @checksum)})"
+      else
+        expected = Checksum.ip_checksum(@raw_data[0, header_length])
+        "INVALID (got: 0x#{sprintf('%04x', @checksum)}, expected: 0x#{sprintf('%04x', expected)})"
+      end
+    end
+    
     # Get header length in bytes
     def header_length
       @ihl ? @ihl * 4 : 0
@@ -170,6 +188,7 @@ module RubyNetStack
       "  Time to Live: #{@ttl}\n" +
       "  Protocol: #{protocol_description} (#{@protocol})\n" +
       "  Header Checksum: 0x#{sprintf('%04x', @checksum)}\n" +
+      "  Checksum Status: #{checksum_status}\n" +
       "  Source IP: #{src_ip_str}\n" +
       "  Destination IP: #{dest_ip_str}\n" +
       "  Options: #{@options.length} bytes\n" +
