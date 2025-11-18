@@ -95,6 +95,18 @@ module RubyNetStack
       calculate(checksum_data)
     end
     
+    # Verify TCP checksum
+    def self.verify_tcp_checksum(src_ip, dest_ip, tcp_packet)
+      actual_checksum = tcp_packet[16, 2].unpack1("n")
+      
+      # Set checksum field to 0 for calculation
+      test_packet = tcp_packet.dup
+      test_packet[16, 2] = "\x00\x00"
+      
+      calculated = tcp_checksum(src_ip, dest_ip, test_packet)
+      calculated == actual_checksum
+    end
+    
     # Calculate ICMP checksum (simpler - no pseudo-header needed)
     def self.icmp_checksum(icmp_packet)
       # Set checksum field (bytes 2-3) to zero before calculation

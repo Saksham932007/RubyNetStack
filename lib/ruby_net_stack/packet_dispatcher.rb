@@ -94,7 +94,12 @@ module RubyNetStack
           { type: :udp, data: nil, parsed: false }
         end
       when IPPacket::PROTOCOL_TCP
-        { type: :tcp, data: nil, parsed: false }
+        tcp_segment = TCPSegment.new(ip_packet.payload)
+        if tcp_segment.src_port
+          { type: :tcp, data: tcp_segment, parsed: true }
+        else
+          { type: :tcp, data: nil, parsed: false }
+        end
       when IPPacket::PROTOCOL_ICMP
         icmp_message = ICMPMessage.new(ip_packet.payload)
         if icmp_message.type
