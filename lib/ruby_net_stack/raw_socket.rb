@@ -25,11 +25,21 @@ module RubyNetStack
       puts "Socket bound to interface: #{@interface_name}"
       puts "Ready to capture and process raw network packets"
       
-      # Basic packet capture loop (will be expanded later)
+      # Enhanced packet capture loop with ethernet frame parsing
       loop do
         data, = @socket.recvfrom(65536)
-        puts "Received #{data.length} bytes"
-        # For now, just show we're receiving data
+        
+        # Parse the ethernet frame
+        frame = EthernetFrame.new(data)
+        
+        if frame.dest_mac
+          puts "\n" + "="*50
+          puts frame.to_s
+          puts "="*50
+        else
+          puts "Received invalid ethernet frame (#{data.length} bytes)"
+        end
+        
         break if data.length == 0
       end
     rescue Interrupt
