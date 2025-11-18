@@ -33,15 +33,24 @@ module RubyNetStack
         frame = EthernetFrame.new(data)
         
         if frame.dest_mac
-          puts "\n" + "="*50
+          puts "\n" + "="*60
           puts frame.to_s
+          
+          # Parse IP packets from ethernet payload
+          if frame.ip? && frame.payload.length > 0
+            ip_packet = IPPacket.new(frame.payload)
+            if ip_packet.version
+              puts "\n" + ip_packet.to_s
+              puts "  Protocol Analysis: #{analyze_protocol(ip_packet)}"
+            end
+          end
           
           # Show hex dump for debugging (optional, can be enabled with env var)
           if ENV['RUBY_NET_STACK_DEBUG']
             puts "\n" + frame.hex_dump
           end
           
-          puts "="*50
+          puts "="*60
         else
           puts "Received invalid ethernet frame (#{data.length} bytes)"
         end
@@ -78,6 +87,52 @@ module RubyNetStack
       rescue StandardError => e
         puts "Error creating raw socket: #{e.message}"
         exit 1
+      end
+    end
+    
+    # Analyze the protocol and provide additional context
+    def analyze_protocol(ip_packet)
+      analysis = []
+      
+      # Basic protocol info
+      analysis << "#{ip_packet.protocol_description}"
+      
+      # Add direction context
+      src_type = classify_ip(ip_packet.src_ip_str)
+      dest_type = classify_ip(ip_packet.dest_ip_str)
+      analysis << "#{src_type} -> #{dest_type}"
+      
+      # Add fragmentation info
+      if ip_packet.fragmented?
+        analysis << "FRAGMENTED"
+        analysis << "offset=#{ip_packet.fragment_offset}" if ip_packet.fragment_offset > 0
+        analysis << "MF" if ip_packet.more_fragments?
+      end
+      
+      # Add payload size context
+      if ip_packet.payload.length > 0
+        analysis << "payload=#{ip_packet.payload.length}b"
+      else
+        analysis << "no payload"
+      end
+      
+      analysis.join(", ")
+    end
+    
+    # Classify IP address type for analysis
+    def classify_ip(ip_string)
+      return "INVALID" unless IPAddress.valid?(ip_string)
+      
+      if IPAddress.localhost?(ip_string)
+        "LOCALHOST"
+      elsif IPAddress.private?(ip_string)
+        "PRIVATE"
+      elsif IPAddress.multicast?(ip_string)
+        "MULTICAST"
+      elsif IPAddress.broadcast?(ip_string)
+        "BROADCAST"
+      else
+        "PUBLIC"
       end
     end
     
