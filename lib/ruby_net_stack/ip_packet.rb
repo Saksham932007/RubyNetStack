@@ -132,8 +132,7 @@ module RubyNetStack
     
     # Format IP address for display
     def format_ip(ip_bytes)
-      return "0.0.0.0" unless ip_bytes && ip_bytes.length == 4
-      ip_bytes.unpack("C4").join(".")
+      IPAddress.bytes_to_string(ip_bytes)
     end
     
     # Get source IP as string
@@ -144,6 +143,16 @@ module RubyNetStack
     # Get destination IP as string  
     def dest_ip_str
       format_ip(@dest_ip)
+    end
+    
+    # Get source IP as integer
+    def src_ip_int
+      IPAddress.bytes_to_int(@src_ip)
+    end
+    
+    # Get destination IP as integer
+    def dest_ip_int  
+      IPAddress.bytes_to_int(@dest_ip)
     end
     
     # Get packet information as string
